@@ -4,8 +4,9 @@ use hyper::{
 };
 #[cfg(feature = "with-openssl")]
 use hyper_openssl::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 #[cfg(feature = "with-hypertls")]
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnectorBuilder;
 use serde;
 use serde_json;
 
@@ -107,13 +108,14 @@ impl CachedCerts {
 impl Client {
     pub fn new() -> Client {
         #[cfg(feature = "with-hypertls")]
-        let ssl = HttpsConnector::new();
+        let ssl = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_http1()
+            .build();
         #[cfg(feature = "with-openssl")]
         let ssl = HttpsConnector::new().expect("unable to build HttpsConnector");
-        let client = HyperClient::builder()
-            .http2_max_frame_size(0x2000)
-            .pool_max_idle_per_host(0)
-            .build(ssl);
+        let client = HyperClient::builder().pool_max_idle_per_host(0).build(ssl);
         Client {
             client,
             audiences: vec![],
@@ -138,12 +140,9 @@ impl Client {
             // Check each certificate
 
             let mut validation = Validation::new(Algorithm::RS256);
+            let decoding_key = DecodingKey::from_rsa_components(&cert.n, &cert.e)?;
             validation.set_audience(&self.audiences);
-            let token_data = jsonwebtoken::decode::<IdInfo>(
-                &id_token,
-                &DecodingKey::from_rsa_components(&cert.n, &cert.e),
-                &validation,
-            )?;
+            let token_data = jsonwebtoken::decode::<IdInfo>(&id_token, &decoding_key, &validation)?;
 
             token_data.claims.verify(self)?;
 
@@ -195,8 +194,8 @@ impl Client {
             if let Ok(value) = value.to_str() {
                 if let Some(cc) = cache_control::CacheControl::from_value(value) {
                     if let Some(max_age) = cc.max_age {
-                        let seconds = max_age.num_seconds();
-                        if seconds >= 0 {
+                        let seconds = max_age.as_secs();
+                        if seconds >= 0 as u64 {
                             *cache = Some(Instant::now() + Duration::from_secs(seconds as u64));
                         }
                     }
