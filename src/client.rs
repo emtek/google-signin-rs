@@ -59,7 +59,7 @@ impl CachedCerts {
     }
 
     fn certs_url() -> &'static str {
-        "https://www.googleapis.com/oauth2/v2/certs"
+        "https://www.googleapis.com/oauth2/v3/certs"
     }
 
     fn get_range<'a>(&'a self, kid: &Option<String>) -> Result<Range<'a, Key, Cert>, Error> {
@@ -132,7 +132,7 @@ impl Client {
         id_token: &str,
         cached_certs: &CachedCerts,
     ) -> Result<IdInfo, Error> {
-        let unverified_header = jsonwebtoken::decode_header(&id_token)?;
+        let unverified_header = jsonwebtoken::decode_header(id_token)?;
 
         use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 
@@ -142,7 +142,7 @@ impl Client {
             let mut validation = Validation::new(Algorithm::RS256);
             let decoding_key = DecodingKey::from_rsa_components(&cert.n, &cert.e)?;
             validation.set_audience(&self.audiences);
-            let token_data = jsonwebtoken::decode::<IdInfo>(&id_token, &decoding_key, &validation)?;
+            let token_data = jsonwebtoken::decode::<IdInfo>(id_token, &decoding_key, &validation)?;
 
             token_data.claims.verify(self)?;
 

@@ -1,3 +1,5 @@
+use crate::Client;
+
 pub use super::CachedCerts;
 
 #[tokio::test]
